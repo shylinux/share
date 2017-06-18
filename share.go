@@ -400,7 +400,56 @@ func mark() int { // {{{
 
 // }}}
 
+func dump() int {
+	if arg("dstfile") != "" {
+		f, _ := os.Create(arg("dstfile"))
+		f.Write([]byte(`## share
+to automate personal files's protection, something like git 用类似于git的方式，自动化保护个人文件
+
+usage: share [subcommand] [arguments]
+
+arguments has two style: indexed and named
+
+indexed arguments have only value, different position has different meanings
+
+named arguments have both name and value, like name=value
+
+`))
+		for k, v := range cmds {
+			fmt.Fprintf(f, "### share %s", k)
+
+			i := 0
+			for _, vv := range v.args {
+				i++
+				fmt.Fprintf(f, " [%s", vv)
+			}
+
+			for i > 0 {
+				fmt.Fprintf(f, "]")
+				i--
+			}
+
+			fmt.Fprintf(f, " [args] \n%s\n", v.text)
+
+			fmt.Fprintf(f, "\n")
+			for _, vv := range v.args {
+				i++
+				a := args[vv]
+				fmt.Fprintf(f, "* **%s** (=%s) %s\n", vv, a.val, a.text)
+			}
+			fmt.Fprintf(f, "\n")
+		}
+
+		fmt.Fprintf(f, "### other optional arguments\n\n")
+		for k, v := range args {
+			fmt.Fprintf(f, "* **%s** (=%s) %s\n", k, v.val, v.text)
+		}
+	}
+	return 1
+}
+
 var cmds = map[string]command{ // {{{
+	"dump":   command{"dump help document", nil, []string{"dstfile"}},
 	"help":   command{"show share usage help", nil, []string{"cmd"}},
 	"listen": command{"socket listen address", listen, []string{"addr", "share", "log"}},
 
@@ -521,9 +570,14 @@ func main() { // {{{
 		db.Exec("insert into config values('count', 0)")
 
 		os.Exit(cmd.hand())
+	} else {
+		switch sub {
+		case "help":
+			os.Exit(help())
+		case "dump":
+			os.Exit(dump())
+		}
 	}
-
-	os.Exit(help())
 }
 
 // }}}
