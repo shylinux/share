@@ -502,6 +502,7 @@ use **share show** *filename* show file trace log
 use **share show** *filename* *hash* show file trace same log
 
 use **share show** *filename* *hash* *recoverfile* receover file to special version
+---
 `))
 
 		for k, v := range cmds {
@@ -533,7 +534,7 @@ use **share show** *filename* *hash* *recoverfile* receover file to special vers
 			fmt.Fprintf(f, "\n")
 		}
 
-		fmt.Fprintf(f, "### other optional arguments\n\n")
+		fmt.Fprintf(f, "---\n### other optional arguments\n\n")
 		for k, v := range args {
 			if v.val == "" || k == "dstfile" {
 				fmt.Fprintf(f, "* **%s** %s\n", k, v.text)
