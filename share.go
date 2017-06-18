@@ -400,11 +400,75 @@ func mark() int { // {{{
 
 // }}}
 
-func dump() int {
+var cmds = map[string]command{ // {{{
+	"dump":   command{"dump markdown document of help", nil, []string{"dstfile"}},
+	"help":   command{"show share usage ", nil, []string{"cmd"}},
+	"listen": command{"start server to trace files' transport", listen, []string{"addr", "share", "log"}},
+
+	"trace": command{"trace file", trace, []string{"srcfile"}},
+	"fork":  command{"trace file's copying", fork, []string{"srcfile", "dstfile"}},
+	"move":  command{"trace file's moving", move, []string{"srcfile", "dstfile"}},
+	"trash": command{"trace file's trash", trash, []string{"srcfile"}},
+
+	"drop": command{"stop trace file", drop, []string{"srcfile"}},
+	"show": command{"show file log", show, []string{"srcfile", "hash", "dstfile"}},
+	"mark": command{"mark file log", mark, []string{"srcfile", "hash", "mark"}},
+}
+
+// }}}
+var args = map[string]*argument{ // {{{
+	"cmd": &argument{"sub command name", "help"},
+
+	"action":  &argument{"trace file action", "trace"},
+	"srcfile": &argument{"source file name", ""},
+	"dstfile": &argument{"destination file name", ""},
+	"remote":  &argument{"socket remote addr", "127.0.0.1:9090"},
+	"hash":    &argument{"the hash value of file", ""},
+	"mark":    &argument{"mark the file log", ""},
+
+	"addr":  &argument{"socket listen address", ":9090"},
+	"share": &argument{"share dirent path", "./temp"},
+	"trash": &argument{"trash dirent path", "./trash"},
+	"log":   &argument{"trash dirent path", "./share.log"},
+
+	"dbuser": &argument{"database user name", "share"},
+	"dbword": &argument{"database pass word", "share"},
+	"dbname": &argument{"database name", "share"},
+}
+
+// }}}
+func arg(arg ...string) string { // {{{
+	var a *argument
+
+	if len(arg) > 0 {
+		a = args[arg[0]]
+	}
+
+	if len(arg) > 1 {
+		a.val = arg[1]
+	}
+
+	switch arg[0] {
+	case "srcfile", "dstfile":
+		if a.val != "" && !path.IsAbs(a.val) {
+			pwd, _ := os.Getwd()
+			a.val = path.Join(pwd, a.val)
+		}
+	}
+
+	return a.val
+}
+
+// }}}
+func dump() int { // {{{
 	if arg("dstfile") != "" {
 		f, _ := os.Create(arg("dstfile"))
 		f.Write([]byte(`## share
 to automate personal files's protection, something like git 用类似于git的方式，自动化保护个人文件
+
+record file operation: upload download modify duplicate move delete drop
+
+recover trace file to any history version
 
 usage: share [subcommand] [arguments]
 
@@ -455,65 +519,6 @@ named arguments have both name and value, like name=value
 		}
 	}
 	return 1
-}
-
-var cmds = map[string]command{ // {{{
-	"dump":   command{"dump help document", nil, []string{"dstfile"}},
-	"help":   command{"show share usage help", nil, []string{"cmd"}},
-	"listen": command{"socket listen address", listen, []string{"addr", "share", "log"}},
-
-	"trace": command{"begin to trace file", trace, []string{"srcfile"}},
-	"fork":  command{"copy file ", fork, []string{"srcfile", "dstfile"}},
-	"move":  command{"move file ", move, []string{"srcfile", "dstfile"}},
-	"trash": command{"move file to trash", trash, []string{"srcfile"}},
-
-	"drop": command{"stop trace file", drop, []string{"srcfile"}},
-	"show": command{"show file log", show, []string{"srcfile", "hash", "dstfile"}},
-	"mark": command{"mark file log", mark, []string{"srcfile", "hash", "mark"}},
-}
-
-// }}}
-var args = map[string]*argument{ // {{{
-	"cmd": &argument{"sub command name", "help"},
-
-	"action":  &argument{"trace file action", "trace"},
-	"srcfile": &argument{"source file name", ""},
-	"dstfile": &argument{"destination file name", ""},
-	"remote":  &argument{"socket remote addr", "127.0.0.1:9090"},
-	"hash":    &argument{"the hash value of file", ""},
-	"mark":    &argument{"mark the file log", ""},
-
-	"addr":  &argument{"socket listen address", ":9090"},
-	"share": &argument{"share dirent path", "./temp"},
-	"trash": &argument{"trash dirent path", "./trash"},
-	"log":   &argument{"trash dirent path", "./share.log"},
-
-	"dbuser": &argument{"database user name", "share"},
-	"dbword": &argument{"database pass word", "share"},
-	"dbname": &argument{"database name", "share"},
-}
-
-// }}}
-func arg(arg ...string) string { // {{{
-	var a *argument
-
-	if len(arg) > 0 {
-		a = args[arg[0]]
-	}
-
-	if len(arg) > 1 {
-		a.val = arg[1]
-	}
-
-	switch arg[0] {
-	case "srcfile", "dstfile":
-		if a.val != "" && !path.IsAbs(a.val) {
-			pwd, _ := os.Getwd()
-			a.val = path.Join(pwd, a.val)
-		}
-	}
-
-	return a.val
 }
 
 // }}}
