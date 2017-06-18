@@ -491,6 +491,17 @@ use **share trace** *filename* every time when the file change
 
 use **share listen** to start a server, then open browser to trans files with other people
 
+use **share drop** *filename* stop to trace file
+
+use **share mark** *filename* *hash* mark file trace log
+
+use **share show** show all trace file
+
+use **share show** *filename* show file trace log
+
+use **share show** *filename* *hash* show file trace same log
+
+use **share show** *filename* *hash* *recoverfile* receover file to special version
 `))
 
 		for k, v := range cmds {

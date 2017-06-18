@@ -26,15 +26,31 @@ use **share trace** *filename* every time when the file change
 
 use **share listen** to start a server, then open browser to trans files with other people
 
-### share drop [srcfile] [args] 
-stop trace file
+use **share drop** *filename* stop to trace file
 
-* **srcfile** source file name
+use **share mark** *filename* *hash* mark file trace log
 
+use **share show** show all trace file
+
+use **share show** *filename* show file trace log
+
+use **share show** *filename* *hash* show file trace same log
+
+use **share show** *filename* *hash* *recoverfile* receover file to special version
 ### share help [cmd] [args] 
 show share usage 
 
 * **cmd** (=dump) sub command name
+
+### share trace [srcfile] [args] 
+trace file
+
+* **srcfile** source file name
+
+### share dump [dstfile] [args] 
+dump markdown document of help
+
+* **dstfile** destination file name
 
 ### share listen [addr [share [log]]] [args] 
 start server to trace files' transport
@@ -42,11 +58,6 @@ start server to trace files' transport
 * **addr** (=:9090) socket listen address
 * **share** (=./temp) share dirent path
 * **log** (=./share.log) trash dirent path
-
-### share trace [srcfile] [args] 
-trace file
-
-* **srcfile** source file name
 
 ### share fork [srcfile [dstfile]] [args] 
 trace file's copying
@@ -65,16 +76,16 @@ trace file's trash
 
 * **srcfile** source file name
 
+### share drop [srcfile] [args] 
+stop trace file
+
+* **srcfile** source file name
+
 ### share show [srcfile [hash [dstfile]]] [args] 
 show file log
 
 * **srcfile** source file name
 * **hash** the hash value of file
-* **dstfile** destination file name
-
-### share dump [dstfile] [args] 
-dump markdown document of help
-
 * **dstfile** destination file name
 
 ### share mark [srcfile [hash [mark]]] [args] 
@@ -86,17 +97,17 @@ mark file log
 
 ### other optional arguments
 
-* **dstfile** destination file name
-* **dbuser** (=share) database user name
+* **srcfile** source file name
 * **trash** (=./trash) trash dirent path
-* **dbname** (=share) database name
-* **addr** (=:9090) socket listen address
-* **share** (=./temp) share dirent path
+* **dbword** (=share) database pass word
 * **cmd** (=dump) sub command name
-* **hash** the hash value of file
+* **dbname** (=share) database name
 * **remote** (=127.0.0.1:9090) socket remote addr
 * **mark** mark the file log
-* **log** (=./share.log) trash dirent path
-* **dbword** (=share) database pass word
+* **share** (=./temp) share dirent path
+* **dbuser** (=share) database user name
 * **action** (=trace) trace file action
-* **srcfile** source file name
+* **dstfile** destination file name
+* **hash** the hash value of file
+* **addr** (=:9090) socket listen address
+* **log** (=./share.log) trash dirent path
