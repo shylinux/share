@@ -478,7 +478,7 @@ indexed arguments have only value, different position has different meanings
 
 named arguments have both name and value, like name=value
 
-### tutorial
+## tutorial
 use **share trace** *filename* start to trace file
 
 use **share fork** *filename* replace **cp** command
@@ -503,7 +503,7 @@ use **share show** *filename* *hash* show file trace same log
 
 use **share show** *filename* *hash* *recoverfile* receover file to special version
 
----
+## manual
 `))
 
 		for k, v := range cmds {
@@ -535,7 +535,8 @@ use **share show** *filename* *hash* *recoverfile* receover file to special vers
 			fmt.Fprintf(f, "\n")
 		}
 
-		fmt.Fprintf(f, "---\n### other optional arguments\n\n")
+		fmt.Fprintf(f, "## appendix\n")
+		fmt.Fprintf(f, "### other optional arguments\n")
 		for k, v := range args {
 			if v.val == "" || k == "dstfile" {
 				fmt.Fprintf(f, "* **%s** %s\n", k, v.text)
