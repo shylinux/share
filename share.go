@@ -335,6 +335,21 @@ func drop() int { // {{{
 // }}}
 func show() int { // {{{
 
+	if arg("srcfile") == "" {
+		if rows, e := db.Query(fmt.Sprintf("select * from name")); e == nil {
+			defer rows.Close()
+
+			var t int64
+			var name, list string
+
+			for rows.Next() {
+				rows.Scan(&t, &name, &list)
+				fmt.Printf("%s %s %s\n", time.Unix(t, 0).Format("2006/01/02 15:04:05"), name, list)
+			}
+		}
+		return 1
+	}
+
 	if rows, e := db.Query(fmt.Sprintf("select list from name where name = ?"), arg("srcfile")); e == nil && rows.Next() {
 		defer rows.Close()
 
@@ -353,17 +368,11 @@ func show() int { // {{{
 				fmt.Printf("%s %s %s %s %s\n", time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
 			}
 
-			if i == 1 {
+			if arg("dstfile") != "" {
 				f, _ := os.Open(path.Join(arg("trash"), hash[0:2], hash))
-				fmt.Printf("why\n")
-				fmt.Printf("%s\n", arg("dstfile"))
-				if arg("dstfile") == "" {
-					io.Copy(os.Stdout, f)
-				} else {
-					df, _ := os.Create(arg("dstfile"))
-					io.Copy(df, f)
-					df.Close()
-				}
+				df, _ := os.Create(arg("dstfile"))
+				io.Copy(df, f)
+				df.Close()
 				f.Close()
 			}
 		}
