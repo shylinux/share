@@ -415,6 +415,7 @@ indexed arguments have only value, different position has different meanings
 named arguments have both name and value, like name=value
 
 `))
+
 		for k, v := range cmds {
 			fmt.Fprintf(f, "### share %s", k)
 
@@ -435,14 +436,22 @@ named arguments have both name and value, like name=value
 			for _, vv := range v.args {
 				i++
 				a := args[vv]
-				fmt.Fprintf(f, "* **%s** (=%s) %s\n", vv, a.val, a.text)
+				if a.val == "" || vv == "dstfile" {
+					fmt.Fprintf(f, "* **%s** %s\n", vv, a.text)
+				} else {
+					fmt.Fprintf(f, "* **%s** (=%s) %s\n", vv, a.val, a.text)
+				}
 			}
 			fmt.Fprintf(f, "\n")
 		}
 
 		fmt.Fprintf(f, "### other optional arguments\n\n")
 		for k, v := range args {
-			fmt.Fprintf(f, "* **%s** (=%s) %s\n", k, v.val, v.text)
+			if v.val == "" || k == "dstfile" {
+				fmt.Fprintf(f, "* **%s** %s\n", k, v.text)
+			} else {
+				fmt.Fprintf(f, "* **%s** (=%s) %s\n", k, v.val, v.text)
+			}
 		}
 	}
 	return 1
