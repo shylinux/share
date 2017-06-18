@@ -470,13 +470,26 @@ record file operation: **upload** **download** **modify** **duplicate** **move**
 
 recover trace file to any history version
 
-usage: share [*subcommand*] [*arguments*]
+**usage: share** [*subcommand*] [*arguments*]
 
 arguments has two style: indexed and named
 
 indexed arguments have only value, different position has different meanings
 
 named arguments have both name and value, like name=value
+
+### tutorial
+use **share trace** *filename* start to trace file
+
+use **share fork** *filename* replace **cp** command
+
+use **share trash** *filename* replace **rm** command
+
+use **share move** *oldfilename* *newfilename* replace **mv** command
+
+use **share trace** *filename* every time when the file change
+
+use **share listen** to start a server, then open browser to trans files with other people
 
 `))
 
