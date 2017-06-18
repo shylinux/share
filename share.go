@@ -41,27 +41,27 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 	if r.Method == "GET" {
 		fs, e := os.Stat("." + r.URL.Path)
 		if e != nil {
-			w.Write([]byte("erorr"))
+			fmt.Fprintf(w, "erorr")
 			return
 		}
 
 		if fs.IsDir() {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(fmt.Sprintf("<DOCTYPE html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body><form method='POST' action='%s' enctype='multipart/form-data'><input type='file' name='file'><input type='submit'></form></body>", r.URL.Path)))
+			fmt.Fprintf(w, `<DOCTYPE html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body><form onsubmit='if (this.mark.value == "") {alert("must add comment"); return false} else {return true}' method='POST' action='%s' enctype='multipart/form-data'><input type='file' name='file'><input type='text' name='mark'><input type='submit'></form></body>`, r.URL.Path)
 
-			w.Write([]byte(fmt.Sprintf("<a href='/'>home: /</a> ")))
+			fmt.Fprintf(w, "<pre><a href='/'>home: /</a>   ")
 			back := r.URL.Path[0 : len(r.URL.Path)-1]
 			back = back[0 : strings.LastIndex(back, "/")+1]
-			w.Write([]byte(fmt.Sprintf("<a href='%s'>back: %s</a> ", back, back)))
-			w.Write([]byte(fmt.Sprintf("path: %s<hr>", r.URL.Path)))
+			fmt.Fprintf(w, "<a href='%s'>back: %s</a>   ", back, back)
+			fmt.Fprintf(w, "path: %s<hr></pre>", r.URL.Path)
 
 			log.Printf("[%s] %s %s\n", r.RemoteAddr, r.Method, r.URL)
 
 			if fl, e := ioutil.ReadDir(fs.Name()); e == nil {
-				w.Write([]byte(fmt.Sprintf("<pre>")))
+				fmt.Fprintf(w, "<pre>")
 				for i, v := range fl {
 					if v.IsDir() {
-						w.Write([]byte(fmt.Sprintf("%d %s    ---   <a href='%s/'> %s</a><br>", i, v.ModTime().Format("2006-01-02 15:04:05"), v.Name(), v.Name())))
+						fmt.Fprintf(w, "%2d %20s    ---    <a href='%s/'>%s</a><br>", i, v.ModTime().Format("2006-01-02 15:04:05"), v.Name(), v.Name())
 					} else {
 						size := ""
 						switch {
@@ -75,22 +75,17 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 							size = fmt.Sprintf("%dB", v.Size())
 						}
 
-						w.Write([]byte(fmt.Sprintf("%d %s %6s   <a href='%s'> %s</a><br>", i, v.ModTime().Format("2006-01-02 15:04:05"), size, v.Name(), v.Name())))
+						fmt.Fprintf(w, "%2d %20s %6s    <a href='%s'>%s</a><br>", i, v.ModTime().Format("2006-01-02 15:04:05"), size, v.Name(), v.Name())
 					}
 				}
-				w.Write([]byte(fmt.Sprintf("</pre>")))
+				fmt.Fprintf(w, "</pre>")
 			}
 		} else {
-			var name string = "." + r.URL.Path
-			var pwd, _ = os.Getwd()
-			name = path.Join(pwd, name)
-
-			if f, e := os.Open(name); e == nil {
+			if f, e := os.Open(arg("srcfile", "."+r.URL.Path)); e == nil {
 				defer f.Close()
 
 				io.Copy(w, f)
 
-				arg("srcfile", name)
 				arg("action", "GET")
 				arg("remote", r.RemoteAddr)
 				trace()
@@ -102,13 +97,11 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 		if u, h, e := r.FormFile("file"); e == nil {
 			defer u.Close()
 
-			var name string = "." + r.URL.Path + h.Filename
-			var pwd, _ = os.Getwd()
-			name = path.Join(pwd, name)
+			name := arg("srcfile", "."+r.URL.Path+h.Filename)
 
 			if info, e := os.Stat(name); e == nil {
 				log.Printf("%s already exists\n", info.Name())
-				w.Write([]byte(fmt.Sprintf("%s already exists\n", info.Name())))
+				fmt.Fprintf(w, "%s already exists\n", info.Name())
 				return
 			}
 
@@ -117,11 +110,10 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 
 				u.Seek(0, os.SEEK_SET)
 				io.Copy(f, u)
-				w.Write([]byte(fmt.Sprintf("%s upload success\n", name)))
+				fmt.Fprintf(w, "%s upload success\n", name)
 
-				arg("srcfile", name)
 				arg("action", "POST")
-				arg("remote", r.RemoteAddr)
+				arg("remote", r.RemoteAddr+" "+r.FormValue("mark"))
 				trace()
 			}
 		}
@@ -173,11 +165,6 @@ func trace() int { // {{{
 	fp := arg("srcfile")
 	action := arg("action")
 	md, size := filemd(fp)
-
-	if !path.IsAbs(fp) {
-		pwd, _ := os.Getwd()
-		fp = path.Join(pwd, fp)
-	}
 
 	if rows, e := db.Query("select list from name where name=?", fp); e == nil {
 		defer rows.Close()
@@ -233,16 +220,7 @@ func trace() int { // {{{
 // }}}
 func fork() int { // {{{
 	fp := arg("srcfile")
-	if !path.IsAbs(fp) {
-		pwd, _ := os.Getwd()
-		fp = path.Join(pwd, fp)
-	}
-
 	fn := arg("dstfile")
-	if !path.IsAbs(fn) {
-		pwd, _ := os.Getwd()
-		fn = path.Join(pwd, fn)
-	}
 
 	fr, _ := os.Open(fp)
 	fw, _ := os.Create(fn)
@@ -257,16 +235,7 @@ func fork() int { // {{{
 // }}}
 func move() int { // {{{
 	fp := arg("srcfile")
-	if !path.IsAbs(fp) {
-		pwd, _ := os.Getwd()
-		fp = path.Join(pwd, fp)
-	}
-
 	fn := arg("dstfile")
-	if !path.IsAbs(fn) {
-		pwd, _ := os.Getwd()
-		fn = path.Join(pwd, fn)
-	}
 
 	os.Rename(fp, fn)
 	db.Exec(fmt.Sprintf("update name set name = ? where name = ?"), fn, fp)
@@ -280,12 +249,8 @@ func move() int { // {{{
 // }}}
 func trash() int { // {{{
 	fp := arg("srcfile")
-	if !path.IsAbs(fp) {
-		pwd, _ := os.Getwd()
-		fp = path.Join(pwd, fp)
-	}
 
-	fn := fmt.Sprintf("%s/trash/%s", os.Getenv("HOME"), path.Base(fp))
+	fn := path.Join(arg("trash"), fmt.Sprintf("%d-%s", time.Now().Unix(), path.Base(fp)))
 	os.Rename(fp, fn)
 	db.Exec(fmt.Sprintf("update name set name = ? where name = ?"), fn, fp)
 
@@ -427,8 +392,8 @@ var args = map[string]*argument{ // {{{
 	"mark":    &argument{"mark the file log", ""},
 
 	"addr":  &argument{"socket listen address", ":9090"},
-	"share": &argument{"share dirent path", "./temp"},
-	"trash": &argument{"trash dirent path", "./trash"},
+	"share": &argument{"share dirent path", fmt.Sprintf("%s/share", os.Getenv("HOME"))},
+	"trash": &argument{"trash dirent path", fmt.Sprintf("%s/share/.trash", os.Getenv("HOME"))},
 	"log":   &argument{"trash dirent path", "./share.log"},
 
 	"dbuser": &argument{"database user name", "share"},
@@ -453,6 +418,10 @@ func arg(arg ...string) string { // {{{
 		if a.val != "" && !path.IsAbs(a.val) {
 			pwd, _ := os.Getwd()
 			a.val = path.Join(pwd, a.val)
+		}
+	case "share", "trash":
+		if _, e := os.Stat(a.val); e != nil {
+			os.MkdirAll(a.val, 0700)
 		}
 	}
 
