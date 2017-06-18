@@ -466,11 +466,11 @@ func dump() int { // {{{
 		f.Write([]byte(`## share
 to automate personal files's protection, something like git 用类似于git的方式，自动化保护个人文件
 
-record file operation: upload download modify duplicate move delete drop
+record file operation: **upload** **download** **modify** **duplicate** **move** **delete** **drop**
 
 recover trace file to any history version
 
-usage: share [subcommand] [arguments]
+usage: share [*subcommand*] [*arguments*]
 
 arguments has two style: indexed and named
 
