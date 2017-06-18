@@ -502,6 +502,7 @@ use **share show** *filename* show file trace log
 use **share show** *filename* *hash* show file trace same log
 
 use **share show** *filename* *hash* *recoverfile* receover file to special version
+
 ---
 `))
 
