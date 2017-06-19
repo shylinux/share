@@ -39,6 +39,22 @@ use **share show** *filename* *hash* show file trace same log
 use **share show** *filename* *hash* *recoverfile* receover file to special version
 
 ## manual
+### share help [cmd] [args] 
+show share usage 
+
+* **cmd** (=dump) sub command name
+
+### share dump [dstfile] [args] 
+dump markdown document of help
+
+* **dstfile** destination file name
+
+### share fork [srcfile [dstfile]] [args] 
+trace file's copying
+
+* **srcfile** source file name
+* **dstfile** destination file name
+
 ### share trash [srcfile] [args] 
 trace file's trash
 
@@ -51,16 +67,17 @@ mark file log
 * **hash** the hash value of file
 * **mark** mark the file log
 
-### share dump [dstfile] [args] 
-dump markdown document of help
+### share listen [addr [share [log]]] [args] 
+start server to trace files' transport
 
-* **dstfile** destination file name
+* **addr** (=:9090) socket listen address
+* **share** (=/home/shy/share) share dirent path
+* **log** (=/home/shy/share/.trash/.share.log) trash log file
 
-### share fork [srcfile [dstfile]] [args] 
-trace file's copying
+### share trace [srcfile] [args] 
+trace file
 
 * **srcfile** source file name
-* **dstfile** destination file name
 
 ### share move [srcfile [dstfile]] [args] 
 trace file's moving
@@ -80,36 +97,20 @@ show file log
 * **hash** the hash value of file
 * **dstfile** destination file name
 
-### share help [cmd] [args] 
-show share usage 
-
-* **cmd** (=dump) sub command name
-
-### share listen [addr [share [log]]] [args] 
-start server to trace files' transport
-
-* **addr** (=:9090) socket listen address
-* **share** (=./temp) share dirent path
-* **log** (=./share.log) trash dirent path
-
-### share trace [srcfile] [args] 
-trace file
-
-* **srcfile** source file name
-
 ## appendix
 ### other optional arguments
-* **dbname** (=share) database name
-* **log** (=./share.log) trash dirent path
-* **dbuser** (=share) database user name
-* **srcfile** source file name
-* **remote** (=127.0.0.1:9090) socket remote addr
+* **mark** mark the file log
 * **addr** (=:9090) socket listen address
-* **dbword** (=share) database pass word
+* **share** (=/home/shy/share) share dirent path
 * **action** (=trace) trace file action
+* **srcfile** source file name
+* **log** (=/home/shy/share/.trash/.share.log) trash log file
+* **remote** (=127.0.0.1:9090) socket remote addr
+* **trash** (=/home/shy/share/.trash) trash dirent path
+* **dbuser** (=share) database user name
+* **dbword** (=share) database pass word
+* **cmd** (=dump) sub command name
 * **dstfile** destination file name
 * **hash** the hash value of file
-* **trash** (=./trash) trash dirent path
-* **cmd** (=dump) sub command name
-* **mark** mark the file log
-* **share** (=./temp) share dirent path
+* **dbfile** (=/home/shy/share/.trash/.share.db) trash database file
+* **dbname** (=share) database name
