@@ -1,11 +1,12 @@
 package main // {{{
 // }}}
 import ( // {{{
+	"bufio"
 	"crypto/md5"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	// _ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/mattn/go-sqlite3"
 	"io"
 	"io/ioutil"
@@ -737,12 +738,15 @@ var args = map[string]*argument{ // {{{
 	"hash":    &argument{"the hash value of file", ""},
 	"mark":    &argument{"mark the file log", "127.0.0.1:9090"},
 
-	"addr":   &argument{"socket listen address", ":9090"},
-	"share":  &argument{"share dirent path", fmt.Sprintf("%s/share", os.Getenv("HOME"))},
-	"trash":  &argument{"trash dirent path", fmt.Sprintf("%s/share/.trash", os.Getenv("HOME"))},
-	"log":    &argument{"trash log file", fmt.Sprintf("%s/share/.trash/.share.log", os.Getenv("HOME"))},
-	"dbfile": &argument{"trash database file", fmt.Sprintf("%s/share/.trash/.share.db", os.Getenv("HOME"))},
+	"addr":  &argument{"socket listen address", ":9090"},
+	"share": &argument{"share dirent path", fmt.Sprintf("%s/share", os.Getenv("HOME"))},
+	"trash": &argument{"trash dirent path", fmt.Sprintf("%s/share/.trash", os.Getenv("HOME"))},
 
+	"config": &argument{"config file name", fmt.Sprintf("%s/share/.trash/.share.conf", os.Getenv("HOME"))},
+	"log":    &argument{"log file name", fmt.Sprintf("%s/share/.trash/.share.log", os.Getenv("HOME"))},
+
+	"dbtype": &argument{"database software name", "sqlite3"},
+	"dbfile": &argument{"trash database file", fmt.Sprintf("%s/share/.trash/.share.db", os.Getenv("HOME"))},
 	"dbuser": &argument{"database user name", "share"},
 	"dbword": &argument{"database pass word", "share"},
 	"dbname": &argument{"database name", "share"},
@@ -977,8 +981,36 @@ func main() { // {{{
 			}
 		}
 
+		if _, e := os.Stat(arg("config")); e == nil {
+			if f, e := os.Open(arg("config")); e == nil {
+				rd := bufio.NewReader(f)
+				for {
+					if l, e := rd.ReadString('\n'); e == nil {
+						l = strings.TrimSpace(l)
+
+						if pos := strings.Index(l, "="); pos > -1 {
+							arg(l[0:pos], l[pos+1:])
+							fmt.Printf("%s=%s\n", l[0:pos], arg(l[0:pos]))
+						}
+					} else {
+						break
+					}
+				}
+			}
+		}
+
 		if cmd.hand != nil {
-			db, _ = sql.Open("sqlite3", arg("dbfile"))
+
+			switch arg("dbtype") {
+			case "sqlite3":
+				db, _ = sql.Open("sqlite3", arg("dbfile"))
+			case "mysql":
+				db, _ = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", arg("dbuser"), arg("dbword"), arg("dbname")))
+			default:
+				fmt.Printf("dbtype error, choice mysql3 or mysql\n")
+				break
+			}
+
 			db.Exec("create table if not exists hash(time int, hash char(32) primary key, size int, count int)")
 			db.Exec("create table if not exists name(time int, name char(255) primary key, list char(8))")
 			db.Exec("create table if not exists config(name char(32) primary key, value text)")
