@@ -5,6 +5,7 @@ import ( // {{{
 	"crypto/md5"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/mattn/go-sqlite3"
@@ -22,7 +23,7 @@ import ( // {{{
 
 type command struct { // {{{
 	text string
-	hand func() int
+	hand func() error
 	args []string
 }
 
@@ -134,7 +135,7 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 }
 
 // }}}
-func listen() int { // {{{
+func listen() (e error) { // {{{
 
 	if l, e := os.OpenFile(arg("log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); e == nil {
 		log.SetOutput(l)
@@ -148,62 +149,64 @@ func listen() int { // {{{
 
 	http.HandleFunc("/", index)
 
-	http.ListenAndServe(arg("addr"), nil)
-	return 1
+	return http.ListenAndServe(arg("addr"), nil)
 }
 
 // }}}
 
-func filemd(file string) (string, int64) { // {{{
-	if f, e := os.Open(file); e == nil {
+func filemd(file string) (md string, size int64, e error) { // {{{
+
+	var f, fm *os.File
+
+	if f, e = os.Open(file); e == nil {
 		defer f.Close()
 
 		h := md5.New()
-		io.Copy(h, f)
-		md := hex.EncodeToString(h.Sum(nil))
+		if size, e = io.Copy(h, f); e == nil {
+			md = hex.EncodeToString(h.Sum(nil))
+			os.MkdirAll(path.Join(arg("trash"), md[0:2]), 0700)
 
-		if e = os.MkdirAll(path.Join(arg("trash"), md[0:2]), 0700); e == nil {
-			if fm, e := os.Create(path.Join(arg("trash"), md[0:2], md)); e == nil {
+			if fm, e = os.Create(path.Join(arg("trash"), md[0:2], md)); e == nil {
 				defer fm.Close()
 
 				f.Seek(0, os.SEEK_SET)
-				size, _ := io.Copy(fm, f)
+				size, e = io.Copy(fm, f)
 
-				return md, size
+				return
 			}
 		}
 	}
 
-	return "", 0
+	return "", 0, e
 }
 
 // }}}
-func trace() int { // {{{
+func trace() (e error) { // {{{
 	fp := arg("srcfile")
+	if fp == "" {
+		return errors.New("srcfile name invalidate")
+	}
+
+	md, size, e := filemd(fp)
+	if md == "" || size == 0 || e != nil {
+		return errors.New(fmt.Sprintf("filemd error: %s", e))
+	}
+
 	action := arg("action")
 	if action == "" {
 		action = arg("action", "trace")
 	}
-	md, size := filemd(fp)
 
-	if fp == "" || action == "" || md == "" || size == 0 {
-		log.Printf("filename: %s\n", fp)
-		log.Printf("action: %s\n", action)
-		log.Printf("md: %s\n", md)
-		log.Printf("size: %d\n", size)
-		log.Printf("error something is null\n")
-		return 1
-	}
-
+	var rows *sql.Rows
 	sql := "select list from name where name=?"
-	if rows, e := db.Query(sql, fp); e == nil {
+	if rows, e = db.Query(sql, fp); e == nil {
 		if rows.Next() {
 			var list string
 			rows.Scan(&list)
 			rows.Close()
 
-			sql := fmt.Sprintf("select done, name, hash from %s order by time desc limit 1", list)
-			if rows, e := db.Query(sql); e == nil && rows.Next() {
+			sql = fmt.Sprintf("select done, name, hash from %s order by time desc limit 1", list)
+			if rows, e = db.Query(sql); e == nil && rows.Next() {
 				var done, name, hash string
 				rows.Scan(&done, &name, &hash)
 				rows.Close()
@@ -213,54 +216,52 @@ func trace() int { // {{{
 
 					db.Exec(fmt.Sprintf("insert into hash values(%d, '%s', %d, 0)", time.Now().Unix(), md, size))
 					db.Exec(fmt.Sprintf("update hash set count=count+1 where hash = ?"), md)
+
+					log.Printf("[%s] %s %s %s", arg("mark"), action, fp, md)
 				}
-			} else {
-				log.Printf("sql exec error: %s\n", sql)
-				return 1
+
+				return nil
 			}
 		} else {
 			rows.Close()
 
 			count := 0
-			sql := "select value from config where name='count'"
-			if rows, e := db.Query(sql); e == nil && rows.Next() {
+			sql = "select value from config where name='count'"
+			if rows, e = db.Query(sql); e == nil && rows.Next() {
 				rows.Scan(&count)
 				rows.Close()
 
 				db.Exec("update config set value=value+1 where name='count'")
-			} else {
-				log.Printf("sql exec error:%s \n", sql)
-				return 1
+
+				db.Exec(fmt.Sprintf("insert into name values(%d, '%s', 'file%d')", time.Now().Unix(), fp, count))
+
+				db.Exec(fmt.Sprintf("create table if not exists file%d(time int, done char(8), name text, hash char(32), mark text)", count))
+				db.Exec(fmt.Sprintf("insert into file%d values(?, ?, ?, ?, ?)", count), time.Now().Unix(), action, fp, md, arg("mark"))
+
+				db.Exec(fmt.Sprintf("insert into hash values(%d, '%s', %d, 0)", time.Now().Unix(), md, size))
+				db.Exec(fmt.Sprintf("update hash set count=count+1 where hash = ?"), md)
+
+				log.Printf("[%s] %s %s %s", arg("mark"), action, fp, md)
+				return nil
 			}
-
-			db.Exec(fmt.Sprintf("insert into name values(%d, '%s', 'file%d')", time.Now().Unix(), fp, count))
-
-			db.Exec(fmt.Sprintf("create table if not exists file%d(time int, done char(8), name text, hash char(32), mark text)", count))
-			db.Exec(fmt.Sprintf("insert into file%d values(?, ?, ?, ?, ?)", count), time.Now().Unix(), action, fp, md, arg("mark"))
-
-			db.Exec(fmt.Sprintf("insert into hash values(%d, '%s', %d, 0)", time.Now().Unix(), md, size))
-			db.Exec(fmt.Sprintf("update hash set count=count+1 where hash = ?"), md)
 		}
-	} else {
-		log.Printf("%s\n", e)
-		return 1
 	}
-
-	log.Printf("[%s] %s %s %s", arg("mark"), action, fp, md)
-	return 0
+	return
 }
 
 // }}}
-func drop() int { // {{{
+func drop() (e error) { // {{{
 	fp := arg("srcfile")
+
+	var rows *sql.Rows
+
 	if fp == "" {
-		if rows, e := db.Query(fmt.Sprintf("select * from name")); e == nil {
+		if rows, e = db.Query(fmt.Sprintf("select * from name")); e == nil {
 			var t int64
-			var i int
 			var name, list string
 			var names = make([]string, 0)
 
-			for i = 0; rows.Next(); i++ {
+			for i := 0; rows.Next(); i++ {
 				rows.Scan(&t, &name, &list)
 				names = append(names, name)
 				fmt.Printf("%d %s %s %s\n", i, time.Unix(t, 0).Format("2006/01/02 15:04:05"), name, list)
@@ -268,82 +269,76 @@ func drop() int { // {{{
 			rows.Close()
 
 			for len(names) > 0 {
-				i = -1
+				i := -1
 				fmt.Printf("select which to drop: ")
 				fmt.Scanf("%d", &i)
 
 				if i < 0 {
-					return 0
+					break
 				}
+
 				if i < len(names) && names[i] != "" {
 					arg("srcfile", names[i])
-					drop()
+					if e = drop(); e != nil {
+						break
+					}
+
 					names[i] = ""
 				}
 			}
-
-			return 0
-		} else {
-			log.Printf("%s\n", e)
-			return 1
 		}
+	} else {
 
-		fmt.Printf("srcfile: %s\n", fp)
-		fmt.Printf("error some thing is null\n")
-		return 1
-	}
-
-	if rows, e := db.Query(fmt.Sprintf("select list from name where name = ?"), arg("srcfile")); e == nil && rows.Next() {
-		var list string
-		rows.Scan(&list)
-		rows.Close()
-
-		if rows, e := db.Query(fmt.Sprintf("select hash from %s", list)); e == nil {
-
-			var hashs = make([]string, 0)
-			var hash string
-
-			for rows.Next() {
-				rows.Scan(&hash)
-				hashs = append(hashs, hash)
-			}
+		if rows, e = db.Query(fmt.Sprintf("select list from name where name = ?"), fp); e == nil && rows.Next() {
+			var list string
+			rows.Scan(&list)
 			rows.Close()
 
-			for _, hash = range hashs {
-				db.Exec(fmt.Sprintf("update hash set count=count-1 where hash=?"), hash)
-			}
+			if rows, e = db.Query(fmt.Sprintf("select hash from %s", list)); e == nil {
 
-			db.Exec(fmt.Sprintf("delete from name where name = ?"), arg("srcfile"))
-			db.Exec(fmt.Sprintf("drop table %s", list))
-
-			if rows, e := db.Query(fmt.Sprintf("select hash from hash where count=0")); e == nil {
-
+				var hashs = make([]string, 0)
 				var hash string
+
 				for rows.Next() {
 					rows.Scan(&hash)
-					os.Remove(path.Join(arg("trash"), hash[0:2], hash))
+					hashs = append(hashs, hash)
 				}
 				rows.Close()
 
-				db.Exec(fmt.Sprintf("delete from hash where count = 0"))
-			}
+				for _, hash = range hashs {
+					db.Exec(fmt.Sprintf("update hash set count=count-1 where hash=?"), hash)
+				}
 
-			log.Printf("[%s] drop %s", arg("mark"), arg("srcfile"))
-			return 0
+				db.Exec(fmt.Sprintf("drop table %s", list))
+				db.Exec(fmt.Sprintf("delete from name where name = ?"), fp)
+
+				if rows, e = db.Query(fmt.Sprintf("select hash from hash where count=0")); e == nil {
+					for rows.Next() {
+						rows.Scan(&hash)
+						os.Remove(path.Join(arg("trash"), hash[0:2], hash))
+						os.Remove(path.Join(arg("trash"), hash[0:2]))
+					}
+					rows.Close()
+
+					db.Exec(fmt.Sprintf("delete from hash where count = 0"))
+				}
+
+				log.Printf("[%s] drop %s", arg("mark"), fp)
+			}
 		}
 	}
-
-	return 1
+	return
 }
 
 // }}}
 
-func show() int { // {{{
+func show() (e error) { // {{{
+	var rows *sql.Rows
+
 	if arg("srcfile") == "" {
-		if rows, e := db.Query(fmt.Sprintf("select * from name")); e == nil {
+		if rows, e = db.Query(fmt.Sprintf("select * from name")); e == nil {
 			var t int64
 			var name, list string
-
 			var names = make([]string, 0)
 
 			for rows.Next() {
@@ -351,7 +346,6 @@ func show() int { // {{{
 				names = append(names, name)
 				fmt.Printf("%d %s %s %s\n", len(names)-1, time.Unix(t, 0).Format("2006/01/02 15:04:05"), name, list)
 			}
-
 			rows.Close()
 
 			for len(names) > 0 {
@@ -360,7 +354,7 @@ func show() int { // {{{
 				fmt.Scanf("%d", &i)
 
 				if i < 0 {
-					return 0
+					break
 				}
 
 				if i < len(names) {
@@ -368,60 +362,51 @@ func show() int { // {{{
 					show()
 				}
 			}
-
-			return 0
-		} else {
-			log.Printf("%s\n", e)
-			return 1
 		}
-	}
-
-	if rows, e := db.Query(fmt.Sprintf("select list from name where name = ?"), arg("srcfile")); e == nil && rows.Next() {
-		var list string
-		rows.Scan(&list)
-		rows.Close()
-
-		if rows, e := db.Query(fmt.Sprintf("select * from %s where hash like '%s%%'", list, arg("hash"))); e == nil {
-			var i, t int64
-			var done, name, hash, user string
-
-			for i = 0; rows.Next(); i++ {
-				rows.Scan(&t, &done, &name, &hash, &user)
-
-				fmt.Printf("%s %s %s %s %s\n", time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
-			}
-
+	} else {
+		if rows, e = db.Query(fmt.Sprintf("select list from name where name = ?"), arg("srcfile")); e == nil && rows.Next() {
+			var list string
+			rows.Scan(&list)
 			rows.Close()
 
-			if arg("dstfile") == "" {
-				return 0
-			}
+			if rows, e = db.Query(fmt.Sprintf("select * from %s where hash like '%s%%'", list, arg("hash"))); e == nil {
+				var i, t int64
+				var done, name, hash, user string
 
-			if f, e := os.Open(path.Join(arg("trash"), hash[0:2], hash)); e == nil {
-				defer f.Close()
+				for i = 0; rows.Next(); i++ {
+					rows.Scan(&t, &done, &name, &hash, &user)
 
-				if df, e := os.Create(arg("dstfile")); e == nil {
-					defer df.Close()
+					fmt.Printf("%s %s %s %s %s\n", time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
+				}
 
-					io.Copy(df, f)
-					return 0
+				rows.Close()
+
+				if arg("dstfile") != "" {
+					var f, fm *os.File
+					if f, e = os.Open(path.Join(arg("trash"), hash[0:2], hash)); e == nil {
+						defer f.Close()
+
+						if fm, e = os.Create(arg("dstfile")); e == nil {
+							defer fm.Close()
+							io.Copy(fm, f)
+						}
+					}
 				}
 			}
 		}
 	}
-
-	return 1
+	return
 }
 
 // }}}
-func mark() int { // {{{
-	fp := arg("srcfile")
+func mark() (e error) { // {{{
+	var rows *sql.Rows
 
+	fp := arg("srcfile")
 	if fp == "" {
-		if rows, e := db.Query(fmt.Sprintf("select * from name")); e == nil {
+		if rows, e = db.Query(fmt.Sprintf("select * from name")); e == nil {
 			var t int64
 			var name, list string
-
 			var names = make([]string, 0)
 
 			for rows.Next() {
@@ -432,106 +417,84 @@ func mark() int { // {{{
 
 			rows.Close()
 
-			if len(names) > 0 {
+			for len(names) > 0 {
 				i := -1
-				fmt.Printf("select which to mark: ")
+				fmt.Printf("select which file to mark: ")
 				fmt.Scanf("%d", &i)
 
 				if i < 0 {
-					return 0
+					break
 				}
 
 				fp = arg("srcfile", names[i])
-			} else {
-				log.Printf("%s\n", e)
-				return 1
+				mark()
 			}
-		} else {
-			log.Printf("%s\n", e)
-			return 1
 		}
-	}
+	} else {
 
-	var which int64
-	if rows, e := db.Query(fmt.Sprintf("select list from name where name = ?"), fp); e == nil && rows.Next() {
-		var list string
-		rows.Scan(&list)
-		rows.Close()
-
-		if rows, e := db.Query(fmt.Sprintf("select * from %s", list)); e == nil {
-			var i, t int64
-			var done, name, hash, user string
-			var hashs = make([]string, 0)
-			var times = make([]int64, 0)
-
-			for i = 0; rows.Next(); i++ {
-				rows.Scan(&t, &done, &name, &hash, &user)
-				hashs = append(hashs, hash)
-				times = append(times, t)
-
-				fmt.Printf("%d %s %s %s %s %s\n", len(hashs)-1, time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
-			}
-
+		if rows, e = db.Query(fmt.Sprintf("select list from name where name = ?"), fp); e == nil && rows.Next() {
+			var list string
+			rows.Scan(&list)
 			rows.Close()
-			if len(hashs) > 0 {
-				i := -1
-				fmt.Printf("select which to mark: ")
-				fmt.Scanf("%d", &i)
 
-				if i < 0 {
-					return 0
+			if rows, e := db.Query(fmt.Sprintf("select * from %s", list)); e == nil {
+				var t int64
+				var done, name, hash, user string
+				var names = make([]string, 0)
+				var hashs = make([]string, 0)
+				var times = make([]int64, 0)
+
+				for i := 0; rows.Next(); i++ {
+					rows.Scan(&t, &done, &name, &hash, &user)
+					names = append(names, name)
+					hashs = append(hashs, hash)
+					times = append(times, t)
+
+					fmt.Printf("%d %s %s %s %s %s\n", len(hashs)-1, time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
 				}
 
-				arg("hash", hashs[i])
-				which = times[i]
-			} else {
-				log.Printf("%s\n", e)
-				return 1
+				rows.Close()
+
+				for len(hashs) > 0 {
+					i := -1
+					fmt.Printf("select which log to mark: ")
+					fmt.Scanf("%d", &i)
+
+					if i < 0 {
+						break
+					}
+
+					if i < len(hashs) {
+						fmt.Printf("input mark> ")
+						buf := make([]byte, 1024)
+						if n, e := os.Stdout.Read(buf[:]); e == nil {
+
+							arg("mark", strings.TrimSpace(string(buf[:n])))
+
+							if _, e := db.Exec(fmt.Sprintf("update %s set mark=? where time = ? and name = ? and hash like '%s%%'", list, hashs[i]), arg("mark"), times[i], names[i]); e == nil {
+							} else {
+								fmt.Printf("%s\n", e)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
-
-	fmt.Printf("input mark> ")
-	buf := make([]byte, 1024)
-	n, e := os.Stdout.Read(buf[:])
-	if e != nil {
-		return 1
-	}
-	arg("mark", strings.TrimSpace(string(buf[:n])))
-
-	if rows, e := db.Query(fmt.Sprintf("select list from name where name = ?"), arg("srcfile")); e == nil && rows.Next() {
-		var list string
-		rows.Scan(&list)
-		rows.Close()
-
-		if _, e := db.Exec(fmt.Sprintf("update %s set mark=? where time = ? and name = ? and hash like '%s%%'", list, arg("hash")), arg("mark"), which, fp); e == nil {
-			return 0
-		}
-
-		if _, e := db.Exec(fmt.Sprintf("update %s set mark=? where name = ? and hash like '%s%%'", list, arg("hash")), arg("mark"), fp); e == nil {
-			return 0
-		}
-	}
-
-	return 1
+	return
 }
 
 // }}}
 
-func fork() int { // {{{
+func fork() (e error) { // {{{
 	fp := arg("srcfile")
 	fn := arg("dstfile")
-	if fp == "" || fn == "" {
-		fmt.Printf("srcfile: %s\n", fp)
-		fmt.Printf("dstfile: %s\n", fn)
-		fmt.Printf("error some thing is null\n")
-		return 1
-	}
 
-	if fr, e := os.Open(fp); e == nil {
+	var fr, fw *os.File
+	if fr, e = os.Open(fp); e == nil {
 		defer fr.Close()
 
-		if fw, e := os.Create(fn); e == nil {
+		if fw, e = os.Create(fn); e == nil {
 			defer fw.Close()
 
 			io.Copy(fw, fr)
@@ -546,41 +509,30 @@ func fork() int { // {{{
 			arg("mark", fn)
 			trace()
 		}
-
 	}
-
-	return 1
+	return
 }
 
 // }}}
-func move() int { // {{{
+func move() (e error) { // {{{
 	fp := arg("srcfile")
 	fn := arg("dstfile")
-	if fp == "" || fn == "" {
-		fmt.Printf("srcfile: %s\n", fp)
-		fmt.Printf("dstfile: %s\n", fn)
-		fmt.Printf("error some thing is null\n")
-		return 1
-	}
-
-	if e := os.Rename(fp, fn); e == nil {
+	if e = os.Rename(fp, fn); e == nil {
 		db.Exec(fmt.Sprintf("update name set name = ? where name = ?"), fn, fp)
 
+		arg("srcfile", fn)
 		if arg("action") == "" {
 			arg("action", "move")
 		}
 
-		arg("srcfile", fn)
 		return trace()
-
 	}
-
-	return 1
+	return
 }
 
 // }}}
 
-func trash() int { // {{{
+func trash() (e error) { // {{{
 	arg("srcfile")
 	arg("dstfile", path.Join(arg("trash"), fmt.Sprintf("%d-%s", time.Now().Unix(), path.Base(arg("srcfile")))))
 	arg("action", "trash")
@@ -588,122 +540,119 @@ func trash() int { // {{{
 }
 
 // }}}
-func clear() int { // {{{
-	fp := arg("srcfile")
-	if fp == "" {
-		if fl, e := ioutil.ReadDir(arg("trash")); e == nil {
-			var names = make([]string, 0)
-			for _, v := range fl {
-				if v.IsDir() || v.Name()[0] == '.' {
-					continue
-				}
-				names = append(names, v.Name())
-				fmt.Printf("%d %s\n", len(names)-1, v.Name())
+func clear() (e error) { // {{{
+	var fl []os.FileInfo
+
+	if fl, e = ioutil.ReadDir(arg("trash")); e == nil {
+		names := make([]string, 0)
+
+		for _, v := range fl {
+			if v.IsDir() || v.Name()[0] == '.' {
+				continue
+			}
+			names = append(names, v.Name())
+			fmt.Printf("%d %s\n", len(names)-1, v.Name())
+		}
+
+		for len(names) > 0 {
+			i := -1
+			fmt.Printf("select which to clear: ")
+			fmt.Scanf("%d", &i)
+
+			if i < 0 {
+				break
 			}
 
-			for len(names) > 0 {
-				i := -1
-				fmt.Printf("select which to clear: ")
-				fmt.Scanf("%d", &i)
+			if i < len(names) && names[i] != "" {
+				fp := path.Join(arg("trash"), names[i])
+				arg("srcfile", fp)
+				drop()
 
-				if i < 0 {
-					return 0
-				}
+				os.Remove(fp)
+				names[i] = ""
 
-				if i < len(names) && names[i] != "" {
-					fp = path.Join(arg("trash"), names[i])
-					arg("srcfile", fp)
-					drop()
-					os.Remove(fp)
-					names[i] = ""
-
-					log.Printf("[%s] clear %s", arg("mark"), arg("srcfile"))
-				}
+				log.Printf("[%s] clear %s", arg("mark"), arg("srcfile"))
 			}
-
-			return 0
 		}
 	}
-
-	return 1
+	return
 }
 
 // }}}
-func restore() int { // {{{
-	fp := arg("srcfile")
-	if fp == "" {
-		if fl, e := ioutil.ReadDir(arg("trash")); e == nil {
-			var names = make([]string, 0)
-			for _, v := range fl {
-				if v.IsDir() || v.Name()[0] == '.' {
-					continue
-				}
-				names = append(names, v.Name())
-				fmt.Printf("%d %s\n", len(names)-1, v.Name())
+func restore() (e error) { // {{{
+	var fl []os.FileInfo
+	var rows *sql.Rows
+
+	if fl, e = ioutil.ReadDir(arg("trash")); e == nil {
+		var names = make([]string, 0)
+
+		for _, v := range fl {
+			if v.IsDir() || v.Name()[0] == '.' {
+				continue
+			}
+			names = append(names, v.Name())
+			fmt.Printf("%d %s\n", len(names)-1, v.Name())
+		}
+
+		for len(names) > 0 {
+			i := -1
+			fmt.Printf("select which file to restore: ")
+			fmt.Scanf("%d", &i)
+
+			if i < 0 {
+				e = nil
+				break
 			}
 
-			if len(names) > 0 {
-				i := -1
-				fmt.Printf("select which to restore: ")
-				fmt.Scanf("%d", &i)
+			if i < len(names) && names[i] != "" {
+				fp := path.Join(arg("trash"), names[i])
+				fn := ""
 
-				if i < 0 {
-					return 0
-				}
+				if rows, e = db.Query(fmt.Sprintf("select list from name where name = ?"), fp); e == nil && rows.Next() {
+					var list string
+					rows.Scan(&list)
+					rows.Close()
 
-				if i < len(names) && names[i] != "" {
-					fp = path.Join(arg("trash"), names[i])
-					fn := ""
+					if rows, e = db.Query(fmt.Sprintf("select * from %s", list)); e == nil {
+						var i, t int64
+						var done, name, hash, user string
+						var names = make([]string, 0)
 
-					if rows, e := db.Query(fmt.Sprintf("select list from name where name = ?"), fp); e == nil && rows.Next() {
-						var list string
-						rows.Scan(&list)
+						for i = 0; rows.Next(); i++ {
+							rows.Scan(&t, &done, &name, &hash, &user)
+							names = append(names, name)
+
+							fmt.Printf("%d %s %s %s %s %s\n", len(names)-1, time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
+						}
+
 						rows.Close()
+						for len(names) > 0 {
+							i := -1
+							fmt.Printf("select which name to recover: ")
+							fmt.Scanf("%d", &i)
 
-						if rows, e := db.Query(fmt.Sprintf("select * from %s", list)); e == nil {
-							var i, t int64
-							var done, name, hash, user string
-							var names = make([]string, 0)
-
-							for i = 0; rows.Next(); i++ {
-								rows.Scan(&t, &done, &name, &hash, &user)
-								names = append(names, name)
-
-								fmt.Printf("%d %s %s %s %s %s\n", len(names)-1, time.Unix(t, 0).Format("2006/01/02 15:04:05"), done, name, hash, user)
+							if i < 0 {
+								break
 							}
 
-							rows.Close()
-							for len(names) > 0 {
-								i := -1
-								fmt.Printf("select which name to recover: ")
-								fmt.Scanf("%d", &i)
+							fn = names[i]
+							if _, e = os.Stat(fn); e != nil && names[i] != "" {
+								arg("srcfile", fp)
+								arg("dstfile", fn)
+								arg("action", "restore")
+								move()
+								names[i] = ""
 
-								if i < 0 {
-									return 0
-								}
-
-								fn = names[i]
-								if _, e := os.Stat(fn); e != nil {
-									break
-								}
+								log.Printf("[%s] restore %s", arg("mark"), arg("srcfile"))
+								break
 							}
 						}
 					}
-
-					arg("srcfile", fp)
-					arg("dstfile", fn)
-					arg("action", "restore")
-					move()
-					names[i] = ""
-
-					log.Printf("[%s] restore %s", arg("mark"), arg("srcfile"))
-					return 0
 				}
 			}
 		}
 	}
-
-	return 1
+	return
 }
 
 // }}}
@@ -722,9 +671,8 @@ var cmds = map[string]command{ // {{{
 	"fork": command{"trace file's copying", fork, []string{"srcfile", "dstfile"}},
 	"move": command{"trace file's moving", move, []string{"srcfile", "dstfile"}},
 
-	"trash": command{"trace file's trash", trash, []string{"srcfile"}},
-	"clear": command{"clear trash file", clear, nil},
-
+	"trash":   command{"trace file's trash", trash, []string{"srcfile"}},
+	"clear":   command{"clear trash file", clear, nil},
 	"restore": command{"restore trash file", restore, nil},
 }
 
@@ -781,14 +729,13 @@ func arg(arg ...string) string { // {{{
 
 // }}}
 
-func dump() int { // {{{
-	if arg("dstfile") != "" {
-		f, e := os.Create(arg("dstfile"))
-		if e != nil {
-			fmt.Printf("%s\n", e)
-			return 1
-		}
-		f.Write([]byte(`## share
+func dump() (e error) { // {{{
+	var f *os.File
+	if f, e = os.Create(arg("dstfile")); e != nil {
+		return
+	}
+
+	f.Write([]byte(`## share
 to automate personal files's protection, something like git 用类似于git的方式，自动化保护个人文件
 
 record file operation: **upload** **download** **modify** **duplicate** **move** **delete** **drop**
@@ -831,55 +778,51 @@ use **share show** *filename* *hash* *recoverfile* receover file to special vers
 ## manual
 `))
 
-		for k, v := range cmds {
-			fmt.Fprintf(f, "### share %s", k)
+	for k, v := range cmds {
+		fmt.Fprintf(f, "### share %s", k)
 
-			i := 0
-			for _, vv := range v.args {
-				i++
-				fmt.Fprintf(f, " [%s", vv)
-			}
-
-			for i > 0 {
-				fmt.Fprintf(f, "]")
-				i--
-			}
-
-			fmt.Fprintf(f, " [args] \n%s\n", v.text)
-
-			fmt.Fprintf(f, "\n")
-			for _, vv := range v.args {
-				i++
-				a := args[vv]
-				if a.val == "" || vv == "dstfile" {
-					fmt.Fprintf(f, "* **%s** %s\n", vv, a.text)
-				} else {
-					fmt.Fprintf(f, "* **%s** (=%s) %s\n", vv, a.val, a.text)
-				}
-			}
-			fmt.Fprintf(f, "\n")
+		i := 0
+		for _, vv := range v.args {
+			i++
+			fmt.Fprintf(f, " [%s", vv)
 		}
 
-		fmt.Fprintf(f, "## appendix\n")
-		fmt.Fprintf(f, "### other optional arguments\n")
-		for k, v := range args {
-			if v.val == "" || k == "dstfile" {
-				fmt.Fprintf(f, "* **%s** %s\n", k, v.text)
+		for i > 0 {
+			fmt.Fprintf(f, "]")
+			i--
+		}
+
+		fmt.Fprintf(f, " [args] \n%s\n", v.text)
+
+		fmt.Fprintf(f, "\n")
+		for _, vv := range v.args {
+			i++
+			a := args[vv]
+			if a.val == "" || vv == "dstfile" {
+				fmt.Fprintf(f, "* **%s** %s\n", vv, a.text)
 			} else {
-				fmt.Fprintf(f, "* **%s** (=%s) %s\n", k, v.val, v.text)
+				fmt.Fprintf(f, "* **%s** (=%s) %s\n", vv, a.val, a.text)
 			}
 		}
-
-		fmt.Printf("dump markdown file '%s' success\n", arg("dstfile"))
-	} else {
-		fmt.Printf("dump markdown file name invalidate\n")
-		return 1
+		fmt.Fprintf(f, "\n")
 	}
-	return 0
+
+	fmt.Fprintf(f, "## appendix\n")
+	fmt.Fprintf(f, "### other optional arguments\n")
+	for k, v := range args {
+		if v.val == "" || k == "dstfile" {
+			fmt.Fprintf(f, "* **%s** %s\n", k, v.text)
+		} else {
+			fmt.Fprintf(f, "* **%s** (=%s) %s\n", k, v.val, v.text)
+		}
+	}
+
+	fmt.Printf("dump markdown file '%s' success\n", arg("dstfile"))
+	return
 }
 
 // }}}
-func help() int { // {{{
+func help() (e error) { // {{{
 	if arg("cmd") == "help" {
 		fmt.Printf("usage: share [subcommand] [arguments]\n")
 		fmt.Printf("usage: share {help} {cmd} to show subcommand usage \n")
@@ -925,12 +868,11 @@ func help() int { // {{{
 			fmt.Printf("sub commnad %s not exists\n", arg("cmd"))
 		}
 	}
-	return 0
+	return
 }
 
 // }}}
 func main() { // {{{
-
 	var sub string
 	var cmd command
 	var words []string
@@ -1020,7 +962,9 @@ func main() { // {{{
 				log.SetOutput(f)
 			}
 
-			cmd.hand()
+			if e := cmd.hand(); e != nil {
+				fmt.Printf("%s", e)
+			}
 		} else {
 			switch sub {
 			case "dump":
