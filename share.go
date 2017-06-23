@@ -53,7 +53,7 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 		if fs.IsDir() {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			fmt.Fprintf(w, `<DOCTYPE html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head>`)
-			fmt.Fprintf(w, `<body><form onsubmit='if (this.mark.value == "") {alert("must add comment"); return false} else {return true}' method='POST' action='%s' enctype='multipart/form-data'><input type='file' name='file'><input type='text' name='mark'><input type='submit'></form>`, r.URL.Path)
+			fmt.Fprintf(w, `<body><form onsubmit='if (this.mark.value == "") {alert("must add comment"); return false} else {return true}' method='POST' action='%s' enctype='multipart/form-data'><input type='file' name='file'><br><br>请留言：<input type='text' name='mark'><input type='submit'></form>`, r.URL.Path)
 
 			fmt.Fprintf(w, "<pre><a href='/'>home: /</a>   ")
 			back := r.URL.Path[0 : len(r.URL.Path)-1]
