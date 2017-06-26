@@ -39,15 +39,27 @@ use **share show** *filename* *hash* show file trace same log
 use **share show** *filename* *hash* *recoverfile* receover file to special version
 
 ## manual
-### share help [cmd] [args] 
-show share usage 
-
-* **cmd** (=dump) sub command name
-
 ### share dump [dstfile] [args] 
 dump markdown document of help
 
 * **dstfile** destination file name
+
+### share listen [addr [share [log]]] [args] 
+start server to trace files' upload and download
+
+* **addr** (=:9090) socket listen address
+* **share** (=/home/shy/share) share dirent path
+* **log** (=/home/shy/share/.trash/.share.log) log file name
+
+### share drop [srcfile] [args] 
+stop trace file
+
+* **srcfile** source file name
+
+### share mark [srcfile] [args] 
+mark file log
+
+* **srcfile** source file name
 
 ### share fork [srcfile [dstfile]] [args] 
 trace file's copying
@@ -55,40 +67,22 @@ trace file's copying
 * **srcfile** source file name
 * **dstfile** destination file name
 
-### share trash [srcfile] [args] 
-trace file's trash
-
-* **srcfile** source file name
-
-### share mark [srcfile [hash [mark]]] [args] 
-mark file log
-
-* **srcfile** source file name
-* **hash** the hash value of file
-* **mark** mark the file log
-
-### share listen [addr [share [log]]] [args] 
-start server to trace files' transport
-
-* **addr** (=:9090) socket listen address
-* **share** (=/home/shy/share) share dirent path
-* **log** (=/home/shy/share/.trash/.share.log) trash log file
-
-### share trace [srcfile] [args] 
-trace file
-
-* **srcfile** source file name
-
 ### share move [srcfile [dstfile]] [args] 
 trace file's moving
 
 * **srcfile** source file name
 * **dstfile** destination file name
 
-### share drop [srcfile] [args] 
-stop trace file
+### share help [cmd] [args] 
+show share usage 
+
+* **cmd** (=dump) sub command name
+
+### share trace [srcfile [mark]] [args] 
+trace file
 
 * **srcfile** source file name
+* **mark** (=127.0.0.1:9090) mark the file log
 
 ### share show [srcfile [hash [dstfile]]] [args] 
 show file log
@@ -97,20 +91,34 @@ show file log
 * **hash** the hash value of file
 * **dstfile** destination file name
 
+### share trash [srcfile] [args] 
+trace file's trash
+
+* **srcfile** source file name
+
+### share clear [args] 
+clear trash file
+
+
+### share restore [args] 
+restore trash file
+
+
 ## appendix
 ### other optional arguments
-* **mark** mark the file log
-* **addr** (=:9090) socket listen address
-* **share** (=/home/shy/share) share dirent path
-* **action** (=trace) trace file action
-* **srcfile** source file name
-* **log** (=/home/shy/share/.trash/.share.log) trash log file
-* **remote** (=127.0.0.1:9090) socket remote addr
 * **trash** (=/home/shy/share/.trash) trash dirent path
+* **config** (=/home/shy/share/.trash/.share.conf) config file name
+* **dbfile** (=/home/shy/share/.trash/.share.db) trash database file
 * **dbuser** (=share) database user name
+* **dstfile** destination file name
+* **mark** (=127.0.0.1:9090) mark the file log
+* **share** (=/home/shy/share) share dirent path
 * **dbword** (=share) database pass word
 * **cmd** (=dump) sub command name
-* **dstfile** destination file name
 * **hash** the hash value of file
-* **dbfile** (=/home/shy/share/.trash/.share.db) trash database file
+* **dbtype** (=sqlite3) database software name
 * **dbname** (=share) database name
+* **action** trace file action
+* **srcfile** source file name
+* **addr** (=:9090) socket listen address
+* **log** (=/home/shy/share/.trash/.share.log) log file name

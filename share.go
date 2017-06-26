@@ -41,7 +41,6 @@ var ( // {{{
 // }}}
 
 func index(w http.ResponseWriter, r *http.Request) { // {{{
-	var e error
 	log.Printf("[%s] %s %s\n", r.RemoteAddr, r.Method, r.URL)
 
 	if r.Method == "GET" {
@@ -126,12 +125,12 @@ func index(w http.ResponseWriter, r *http.Request) { // {{{
 				arg("action", "POST")
 				arg("mark", r.RemoteAddr+" "+r.FormValue("mark"))
 				trace()
+				return
 			}
 		}
 	}
-
-	log.Printf("%s\n", e)
-	fmt.Fprintf(w, "%s\n", e)
+	fmt.Fprintf(w, "internal error\n")
+	log.Printf("internal error\n")
 }
 
 // }}}
@@ -336,7 +335,7 @@ func show() (e error) { // {{{
 	var rows *sql.Rows
 
 	if arg("srcfile") == "" {
-		if rows, e = db.Query(fmt.Sprintf("select * from name")); e == nil {
+		if rows, e = db.Query(fmt.Sprintf("select * from name where name not like '%s%%'", arg("trash"))); e == nil {
 			var t int64
 			var name, list string
 			var names = make([]string, 0)
@@ -642,8 +641,6 @@ func restore() (e error) { // {{{
 								arg("action", "restore")
 								move()
 								names[i] = ""
-
-								log.Printf("[%s] restore %s", arg("mark"), arg("srcfile"))
 								break
 							}
 						}
